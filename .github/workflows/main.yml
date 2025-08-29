@@ -1,0 +1,90 @@
+name: Build Web + Android AAB/APK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+env:
+  APP_ID: com.yourcompany.krerp
+  APP_NAME: "kr*ERP"
+
+jobs:
+  build-web:
+    name: Build web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm ci
+      - name: Build web assets
+        run: npm run build
+      - name: Upload web-build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: build
+
+  build-android:
+    name: Build Android AAB & APK (Capacitor)
+    runs-on: ubuntu-latest
+    needs: build-web
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Install Android SDK (via action)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          target: default
+          arch: x86_64
+          force-avd-creation: false
+
+      - name: Install Capacitor CLI
+        run: npm install @capacitor/cli @capacitor/core --no-save
+
+      - name: Init Capacitor (idempotent)
+        run: |
+          npx cap init "${{ env.APP_NAME }}" "${{ env.APP_ID }}" --web-dir=build || true
+
+      - name: Add Android platform (idempotent)
+        run: |
+          npx cap add android || true
+
+      - name: Copy web to Android
+        run: npx cap copy android
+
+      - name: Build Android (release bundle)
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          # Clean first
+          ./gradlew clean
+          # Build release AAB
+          ./gradlew bundleRelease -Pandroid.injected.testOnly=false
+
+      - name: Gather AAB & APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifacts
+          path: |
+            android/app/build/outputs/bundle/release/*.aab
+            android/app/build/outputs/apk/release/*.apk
+            
