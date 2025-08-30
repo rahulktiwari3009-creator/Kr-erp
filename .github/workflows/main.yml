@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 18
       - name: Install dependencies
-        run: npm Install
+        run: npm 
       - name: Build web assets
         run: npm run build
       - name: Upload web-build artifact
